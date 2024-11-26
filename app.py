@@ -14,9 +14,13 @@ im=cv2.imread("assets/download.jpg",1);
 im[0:100,0:20]=np.zeros((100, 20,3));
 
 
-vid=cv2.VideoCapture('assets/lat.mp4');
+vid=cv2.VideoCapture('assets/dance.mp4');
 
 nm =cv2.imread('assets/nm.png',-1);
+# Add 200 transparent pixels to the left and right
+top, bottom, left, right = 0, 0, 200, 200
+transparent_padding = [0, 0, 0, 0]  # RGBA for transparency
+nm = cv2.copyMakeBorder(nm, top, bottom, left, right, cv2.BORDER_CONSTANT, value=transparent_padding)
 
 # Define body part groups by landmark indices
 BODY_PARTS = {
@@ -105,16 +109,20 @@ height, width, _ = nm.shape
 cv2.namedWindow("Video", cv2.WINDOW_NORMAL)
 
 # Resize the window to fit your screen
-cv2.resizeWindow("Video", 1100, 1100)  # Example dimensions; adjust as needed
+#cv2.resizeWindow("Video", 1100, 1100)  # Example dimensions; adjust as needed
 last_landmarks = None
 di=np.empty((2, 0));
 
-takeframe=False;
+takeframe=True;
 
 imga=nm;
 
-imga=cv2.resize(nm,(1000,1000))
-imgno="hel2";
+#imga=cv2.resize(nm,(1000,1000))
+imgno="hel4";
+h, w = nm.shape[:2]
+aspect_ratio = w / h
+new_h, new_w = 1000, int(1000 * aspect_ratio)
+imga = cv2.resize(nm, (new_w, new_h))
 if takeframe:
        #imga=dra.remove_background_grabcut(imga);
        imgarr=dra.process_body_parts(imga,BODY_PARTS)
@@ -122,7 +130,7 @@ if takeframe:
           pickle.dump(imgarr, file)
        print("Image data saved!");
 else:
-        with open("image_datahel.pkl", "rb") as file:
+        with open("image_datahel4.pkl", "rb") as file:
             imgarr = pickle.load(file)
         print("Image data loaded!")
 
@@ -132,10 +140,13 @@ imga = cv2.cvtColor(imga, cv2.COLOR_BGRA2RGB)
 res=pose.process(imga);
 
 lastpoints=None;
-lastpoints=dra.calculate_body_part_points(res,BODY_PARTS,BODY_PART_INDICES);
+firstpoints=dra.calculate_body_part_points(res,BODY_PARTS,BODY_PART_INDICES);
+image=imga.copy();
 
 
-
+points_change={}
+for part_name, landmarks in BODY_PARTS.items():
+    points_change[part_name]=[(0,0),(0,0)];
 
 canvas = np.zeros_like(nm)
 
@@ -147,9 +158,9 @@ canvas = np.zeros_like(nm)
 while vid.isOpened():
       ret ,img=vid.read();
       img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-      h,w=1000,1000;
+      h,w=new_h,new_w;
 
-      img = cv2.resize(img, (w, h))
+      img = cv2.resize(img, (new_w, new_h))
       
       
       results = pose.process(img)
@@ -161,10 +172,10 @@ while vid.isOpened():
          mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2),
          mp_drawing.DrawingSpec(color=(0, 0, 255), thickness=2)
          )
-      left_shoulder=None;
+      
       landmarks=None;
       body_part_points = {}
-      central_points = {}
+      
       if results.pose_landmarks:
        landmarks = results.pose_landmarks.landmark;
       else :
@@ -184,7 +195,7 @@ while vid.isOpened():
 # Update `last_landmarks` with the currentimg's landmarks for next comparison
       
       last_landmarks = [landmark for landmark in landmarks];
-      canvas = np.zeros((1001, 1000, 4), dtype=np.uint8)
+      canvas = np.zeros((new_h, new_h, 4), dtype=np.uint8)
       newim=np.ones_like(nm);
       if lastpoints !=None :
         for part, points in body_part_points.items():
@@ -209,16 +220,17 @@ while vid.isOpened():
             ang=calculate_angle(roty-lastpoints[part][0][1],rotx-lastpoints[part][0][0])
             anglast =calculate_angle(lastpoints[part][1][1]-lastpoints[part][0][1],lastpoints[part][1][0]-lastpoints[part][0][0]);
             angle= (ang-anglast);
-            print(part)
-            print(angle,ang,anglast)
-            rotation_matrix = cv2.getRotationMatrix2D((lastpoints[part][0][0]*w,lastpoints[part][0][1]*h), angle, 1.0)
+            
+            rotation_matrix = cv2.getRotationMatrix2D((firstpoints[part][0][0]*w,firstpoints[part][0][1]*h), angle, 1.0)
             rotated_roi = cv2.warpAffine(imgarr[part], rotation_matrix, (w, h))
             # Translate the body part image
+            firstpoints[part][0][0]+=dx;
+            firstpoints[part][0][1]+=dy;
             translation_matrix = np.float32([[1, 0, dx*w], [0, 1, dy*h]])
             translated_part = cv2.warpAffine(rotated_roi, translation_matrix, (canvas.shape[1], canvas.shape[0]))
             canvas=overlay_image(canvas, translated_part)
             imgarr[part]=translated_part;
-            print(points);
+            
       else:
             centx=body_part_points['lower_torso'][0][0]+body_part_points['lower_torso'][1][0];
             centx=centx/2;
@@ -230,9 +242,19 @@ while vid.isOpened():
       tmp=nm.copy();
       #mp_drawing.draw_landmarks(
       #  tmp, resultsnm.pose_landmarks, mp_pose.POSE_CONNECTIONS)# Display the image with pose landmarks
-
+      print(firstpoints);
       cv2.imshow("Pose", canvas)
       cv2.imshow("Video", img)
+      # Draw points on the image
+      for part_name, points in firstpoints.items():
+            for point in points:
+                x, y = point
+                # Draw the point
+                cv2.circle(image, (int(x*new_w), int(y*new_h)), radius=5, color=(0, 0, 255), thickness=-1)
+                # Optionally, add text labels
+                cv2.putText(image, part_name, (int(x*new_w), int(y*new_h)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+      cv2.imshow("firts",image);
+      image=imga.copy();
       #cv2.setMouseCallback("Pose", click_event)
       if cv2.waitKey(1)==ord('q'):
         break

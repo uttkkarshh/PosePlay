@@ -124,7 +124,7 @@ def calculate_body_part_points(results, BODY_PARTS, BODY_PART_INDICES):
     centx=body_part_points["lower_torso"][0][0]+body_part_points["lower_torso"][1][0];
     centx=centx/2;
     centy=body_part_points["lower_torso"][0][1]+body_part_points["lower_torso"][1][1];
-    centy=centx/2;
+    centy=centy/2;
     body_part_points["lower_torso"][0][0]=centx;
     body_part_points["lower_torso"][0][1]=centy;
     return body_part_points
